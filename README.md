@@ -1,5 +1,7 @@
 DSP/DotSlashProtocol - A TCP/IP Fork
 
+Based on [TUPacket](https://github.com/dotslashCosmic/TUPacket) by me :)
+
 Still under construction
 
 Features: 
