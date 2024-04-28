@@ -5,7 +5,7 @@
 #TODO fix format_hex to properly sanitize \ for hex
 #TODO properly wrap ports in b''
 
-import socket, time, binascii
+import socket, time, binascii, struct
 data = 'Hello, world!'
 
 class DSP:
@@ -105,7 +105,7 @@ class DSP:
         header8 = b'\x00\x00\x00\x00'							# Acknowledgement Number
         print(header8, ' Acknowledgement Number')
         header9 = b'\x35\x02' + self.data_hex()						# Data Offset, Reserved | Data Size
-        print(header9, ' Data Offset, Reserved, Flags | Data Size')
+        print(header9, ' Data Offset, Reserved | Data Size')
         header10 = self.char_to_hex(self.data)							# Data, max of 255^2-40 bytes
         dataheader =  header7 + header8 + header9 + header10
         print(header10, ' Data')
