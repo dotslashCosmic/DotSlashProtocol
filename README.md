@@ -4,7 +4,9 @@ Based on [TUPacket](https://github.com/dotslashCosmic/TUPacket) by me :)
 
 Features: 
 - Smaller footprint
-- larger payload per fragmentation(soon)
+- Raw packet sending over raw socket
+- Packet logging
+- Larger payload per fragmentation(soon)
 - TCP/UDP spoofing(soon)
 
 Still under construction
