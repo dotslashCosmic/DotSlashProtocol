@@ -5,9 +5,9 @@
 import socket, time, binascii, struct, os, logging, time
 
 class DSP:
-    def __init__(self, source_ip, target_ip, source_port, dest_port, data):
+    def __init__(self, source_ip, dest_ip, source_port, dest_port, data):
         self.source_ip = source_ip
-        self.target_ip = target_ip
+        self.dest_ip = dest_ip
         self.source_port = source_port
         self.dest_port = dest_port
         self.data = data
@@ -54,6 +54,10 @@ class DSP:
         hex_parts = ['\\x{:02x}'.format(int(part)) for part in parts]
         return ''.join(hex_parts)
     
+    def final_checksum(self, c1, c2):
+        final = c1 + c2
+        return self.checksum(final)
+        
     def checksum(self, header):
         pos = len(header)
         if pos & 1:
@@ -93,20 +97,30 @@ class DSP:
         #convert self.dsp.packet from \xhex into ascii, then remove any extra '\', then convert back to \xhex
         pass
         
+    def log(self, packet):
+        current_time = time.strftime("%Y%m%d-%H%M%S")
+        logging.basicConfig(filename=f'packet_{current_time}.txt', level=logging.INFO, format='DotSlashProtocol:%(message)s')
+        logging.info(packet)
+        
     def send_packet(self, packet):
-        print('sending packet via raw socket not implimented yet')
+        s = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW)
+        i = s.setsockopt(socket.IPPROTO_IP,  socket.IP_HDRINCL, 1)
+        print('\nSOCKET INFO:', s, i, 'IP_PROTOIP:', socket.IPPROTO_IP, 'IP_HDRINCL:',  socket.IP_HDRINCL)
+        s.bind(('0.0.0.0', self.source_port))
+        s.sendto(packet, (self.dest_ip, self.dest_port))
         return
         
     def dsp(self):
         fragments = self.fragmentation(self.data.encode())
         frag_offset = self.frag_offset
-        header1 = b'\xaa\x18' + self.total_length()# Version, IHL | Total Length of Packet
+        header1 = b'\xcc\x18' + self.total_length()# Version, IHL | Total Length of Packet
+        print('\nPACKET BREAKDOWN:')
         print(header1, ' Version, IHL, Total Length of Packet')
         header2 = b'\xcc\xc0' + self.str_to_bytes(self.port_to_hex(frag_offset))# Identification | Fragment Offset
         print(header2, ' Identification | Fragment Offset')
         header3 = socket.inet_aton(self.source_ip)# Source Address
         print(header3, ' Source Address')
-        header4 = socket.inet_aton(self.target_ip)# Destination Address
+        header4 = socket.inet_aton(self.dest_ip)# Destination Address
         print(header4, ' Destination Address')
         header5 = self.port_to_hex(self.source_port) + self.port_to_hex(self.dest_port)# Source Port | Destination Port
         header5 = self.str_to_bytes(header5)
@@ -122,22 +136,17 @@ class DSP:
         mainheader = mainheader + header6
         print(header9, ' Data')
         dataheader = header7 + header8 + header9
-        header10 = self.checksum(dataheader) + b'\x00\x00'# Data Checksum | Urgent Pointer
+        header10 = self.checksum(dataheader) + self.final_checksum(self.checksum(mainheader), self.checksum(dataheader))# Data Checksum | Final Checksum
         packet = mainheader + dataheader + header10
-        print(header10, ' Checksum | Urgent Pointer')
-        print('PACKET:', packet)
+        print(header10, ' Data Checksum | Final Checksum')
+        print('\nPACKET:', packet)
         self.log(packet)
         self.send_packet(packet)
-        
-    def log(self, packet):
-        current_time = time.strftime("%Y%m%d-%H%M%S")
-        logging.basicConfig(filename=f'packet_{current_time}.txt', level=logging.INFO, format='DotSlashProtocol:%(message)s')
-        logging.info(packet)
-    
+            
 def get_user_input():
     source_ip = socket.gethostbyname(socket.gethostname())
     print(f"Source IP Address: {source_ip}")
-    target_ip = input("Enter the destination IP address (default: 192.168.1.2):") or '192.168.1.2'
+    dest_ip = input("Enter the destination IP address (default: 192.168.1.2):") or '192.168.1.2'
     source_port = int(input("Enter the source port (default: 80):") or 80)
     dest_port = int(input("Enter the destination port (default: 80):") or 80)
     data_type = input("Do you want to enter data, upload a file, or default: (data/file/default)")
@@ -153,10 +162,10 @@ def get_user_input():
             data = 'Hello, world!'
     else:
         data = 'Hello, world!'
-    return source_ip, target_ip, source_port, dest_port, data
+    return source_ip, dest_ip, source_port, dest_port, data
 
 if __name__ == "__main__":
     print("Welcome to DotSlashProtocol - A TCP/IP Fork")
-    source_ip, target_ip, source_port, dest_port, data = get_user_input()
-    send = DSP(source_ip, target_ip, source_port, dest_port, data)
+    source_ip, dest_ip, source_port, dest_port, data = get_user_input()
+    send = DSP(source_ip, dest_ip, source_port, dest_port, data)
     send.dsp()
