@@ -1,9 +1,8 @@
 #DotSlashProtocol - A TCP/IP Fork
 #Author: dotSlashCosmic
-#TODO merge frag offset
 #TODO add binary de/reserialization def
 
-import socket, time, binascii, struct, os
+import socket, time, binascii, struct, os, logging, time
 
 class DSP:
     def __init__(self, source_ip, target_ip, source_port, dest_port, data):
@@ -12,6 +11,7 @@ class DSP:
         self.source_port = source_port
         self.dest_port = dest_port
         self.data = data
+        self.frag_offset = 0
 
     def hexify(self, input):
         if isinstance(input, str):
@@ -29,9 +29,6 @@ class DSP:
     
     def dec_to_hex(self, d):
         return '\\x' + format(d, '02x')
-
-    def int_to_hex(self, i):
-        return ''.join('\\x'+hex(byte)[2:] for byte in i.to_bytes((i.bit_length() + 7) // 8, 'big'))
 
     def str_to_hex(self, s):
         if isinstance(s, int):
@@ -51,6 +48,12 @@ class DSP:
     def format_hex(self, hexf):
         return b''.join(rb'\x'+hexf[i:i+2] for i in range(0, len(hexf), 2))
         
+    def ip_to_bytes(self, ip):
+        print(ip)
+        parts = ip.split('.')
+        hex_parts = ['\\x{:02x}'.format(int(part)) for part in parts]
+        return ''.join(hex_parts)
+    
     def checksum(self, header):
         pos = len(header)
         if pos & 1:
@@ -76,21 +79,23 @@ class DSP:
         
     def fragmentation(self, data_bytes):
         max_data_size = (255**2) - 36
-        self.frag_offset = 7
-        fragments = []
         while data_bytes:
             if len(data_bytes) > max_data_size:
                 fragment, data_bytes = data_bytes[:max_data_size], data_bytes[max_data_size:]
-                fragments.append((fragment, self.frag_offset))
+                yield (fragment, self.frag_offset)
                 self.frag_offset += 1
             else:
-                fragments.append((data_bytes, self.frag_offset))
+                yield (data_bytes, self.frag_offset)
                 data_bytes = b''
         return fragments
         
     def serialization(self, stream):
         #convert self.dsp.packet from \xhex into ascii, then remove any extra '\', then convert back to \xhex
         pass
+        
+    def send_packet(self, packet):
+        print('sending packet via raw socket not implimented yet')
+        return
         
     def dsp(self):
         fragments = self.fragmentation(self.data.encode())
@@ -121,10 +126,17 @@ class DSP:
         packet = mainheader + dataheader + header10
         print(header10, ' Checksum | Urgent Pointer')
         print('PACKET:', packet)
-        time.sleep(10)
-
+        self.log(packet)
+        self.send_packet(packet)
+        
+    def log(self, packet):
+        current_time = time.strftime("%Y%m%d-%H%M%S")
+        logging.basicConfig(filename=f'packet_{current_time}.txt', level=logging.INFO, format='DotSlashProtocol:%(message)s')
+        logging.info(packet)
+    
 def get_user_input():
-    source_ip = input("Enter the source IP address (default: 192.168.1.1):") or '192.168.1.1'
+    source_ip = socket.gethostbyname(socket.gethostname())
+    print(f"Source IP Address: {source_ip}")
     target_ip = input("Enter the destination IP address (default: 192.168.1.2):") or '192.168.1.2'
     source_port = int(input("Enter the source port (default: 80):") or 80)
     dest_port = int(input("Enter the destination port (default: 80):") or 80)
