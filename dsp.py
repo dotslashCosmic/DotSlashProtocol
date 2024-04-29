@@ -1,7 +1,6 @@
 #DotSlashProtocol - A TCP/IP Fork
 #Author: dotSlashCosmic
-#TODO merge frag offset/data size
-#TODO add bytes_wrap def
+#TODO merge frag offset
 #TODO add binary de/reserialization def
 
 import socket, time, binascii, struct, os
@@ -43,14 +42,14 @@ class DSP:
     def str_to_bytes(self, s):
         return bytes.fromhex(s.replace('\\x', ''))
         
-    def char_to_hex(self, c):
-        return self.str_to_hex(c)
-
+    def data_to_bytes(self, d):
+        return bytes(int(d[i:i+2], 16) for i in range(2, len(d), 4))
+        
     def port_to_hex(self, port):
         return '\\x' + '\\x'.join([hex(port)[2:].zfill(4)[i:i+2] for i in range(0, 4, 2)])
 
-    def format_hex(self, hexip):
-        return b''.join(rb'\x'+hexip[i:i+2] for i in range(0, len(hexip), 2))
+    def format_hex(self, hexf):
+        return b''.join(rb'\x'+hexf[i:i+2] for i in range(0, len(hexf), 2))
         
     def checksum(self, header):
         pos = len(header)
@@ -67,7 +66,7 @@ class DSP:
         result = (~sum) & 0xffff
         hexresult = self.hexify(result)
         return hexresult
-
+        
     def cluster(self):
         cluster_id = os.urandom(4)
         hex_cluster_id = cluster_id.hex()
@@ -77,7 +76,7 @@ class DSP:
         
     def fragmentation(self, data_bytes):
         max_data_size = (255**2) - 36
-        self.frag_offset = 0
+        self.frag_offset = 7
         fragments = []
         while data_bytes:
             if len(data_bytes) > max_data_size:
@@ -93,17 +92,12 @@ class DSP:
         #convert self.dsp.packet from \xhex into ascii, then remove any extra '\', then convert back to \xhex
         pass
         
-    def bytes_wrap(self, b):
-        #binary wrap any \xhex
-        pass
-        
     def dsp(self):
         fragments = self.fragmentation(self.data.encode())
         frag_offset = self.frag_offset
         header1 = b'\xaa\x18' + self.total_length()# Version, IHL | Total Length of Packet
         print(header1, ' Version, IHL, Total Length of Packet')
-        header2 = b'\xcc\xc0\x00\x00'# Identification | Fragment Offset
-        print('REAL FRAG OFFSET:', self.port_to_hex(frag_offset))
+        header2 = b'\xcc\xc0' + self.str_to_bytes(self.port_to_hex(frag_offset))# Identification | Fragment Offset
         print(header2, ' Identification | Fragment Offset')
         header3 = socket.inet_aton(self.source_ip)# Source Address
         print(header3, ' Source Address')
@@ -117,17 +111,16 @@ class DSP:
         print(header6, ' TTL, Protocol | Header Checksum')
         header7 = self.cluster()# Cluster Number
         print(header7, ' Cluster Number')
-        print('REAL DATA SIZE:', self.port_to_hex(len(self.data.encode())))
-        header8 = b'\x35\x02' + self.port_to_hex(len(self.data.encode()))# Data Offset, Reserved | Data Size
+        header8 = b'\x21\x00' + self.str_to_bytes(self.port_to_hex(len(self.data.encode())))# Data Offset, Reserved | Data Size
         print(header8, ' Data Offset, Reserved | Data Size')
-        header9 = self.char_to_hex(self.data)# Data, max of 255^2-36 bytes per fragment
+        header9 = self.data_to_bytes(self.str_to_hex(self.data))# Data, max of 255^2-36 bytes per fragment
         mainheader = mainheader + header6
-        dataheader = header7 + header8 + header9 + header10
         print(header9, ' Data')
-        header10 = self.checksum(fullheader) + b'\x00\x00'# Data Checksum | Urgent Pointer
+        dataheader = header7 + header8 + header9
+        header10 = self.checksum(dataheader) + b'\x00\x00'# Data Checksum | Urgent Pointer
         packet = mainheader + dataheader + header10
         print(header10, ' Checksum | Urgent Pointer')
-        print(packet)
+        print('PACKET:', packet)
         time.sleep(10)
 
 def get_user_input():
