@@ -7,6 +7,7 @@ Features:
 - Raw packet sending over raw socket
 - Packet logging
 - Source IP/Mac spoofing
+- ECC encryption
 - Larger payload per fragmentation(soon)
 - TCP/UDP spoofing(soon)
 
