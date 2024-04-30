@@ -1,9 +1,45 @@
 #DotSlashProtocol - A TCP/IP Fork
 #Author: dotSlashCosmic
-#TODO add binary de/reserialization def
 
-import socket, time, binascii, struct, os, logging, time
+import socket, time, binascii, struct, os, logging, time, re
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
+class ECC():
+    def __init__(self):
+        self.private_key = ec.generate_private_key(ec.SECP256R1())
+        self.public_key = self.private_key.public_key()
+
+    def encrypt(self, data):
+        shared_key = self.private_key.exchange(ec.ECDH(), self.public_key)
+        derived_key = HKDF(
+            algorithm=hashes.SHA512(),
+            length=64,
+            salt=None,
+            info=None,
+        ).derive(shared_key)
+        aes_key = derived_key[:32]
+        nonce = os.urandom(12)
+        aesgcm = AESGCM(aes_key)
+        ct = aesgcm.encrypt(nonce, data, None)
+        return (nonce, ct)
+
+    def decrypt(self, nonce, ct):
+        shared_key = self.private_key.exchange(ec.ECDH(), self.public_key)
+        derived_key = HKDF(
+            algorithm=hashes.SHA512(),
+            length=64,
+            salt=None,
+            info=None,
+        ).derive(shared_key)
+        aes_key = derived_key[:32]
+        aesgcm = AESGCM(aes_key)
+        return aesgcm.decrypt(nonce, ct, None)
+        
 class DSP:
     def __init__(self, source_ip, dest_ip, source_port, dest_port, data):
         self.source_ip = source_ip
@@ -12,7 +48,12 @@ class DSP:
         self.dest_port = dest_port
         self.data = data
         self.frag_offset = 0
-
+    
+    def dataint(self, t):
+        b = b''.join(part for part in t)
+        s = b.decode('utf-8', 'ignore')
+        return len(s)
+        
     def hexify(self, input):
         if isinstance(input, str):
             return bytes(input, 'utf-8')
@@ -20,7 +61,7 @@ class DSP:
             return input.to_bytes((input.bit_length() + 7) // 8, 'big')
 
     def total_length(self):
-        length = len(self.data.encode())
+        length = self.dataint(self.encrypted_data)
         total_length = int(length) + 36
         if total_length < 256:
             return b'\x00' + total_length.to_bytes(1, 'big')
@@ -42,6 +83,9 @@ class DSP:
     def data_to_bytes(self, d):
         return bytes(int(d[i:i+2], 16) for i in range(2, len(d), 4))
         
+    def tuple_to_bytes(self, t):
+        return b''.join(part for part in t) 
+        
     def port_to_hex(self, port):
         return '\\x' + '\\x'.join([hex(port)[2:].zfill(4)[i:i+2] for i in range(0, 4, 2)])
 
@@ -54,11 +98,11 @@ class DSP:
         hex_parts = ['\\x{:02x}'.format(int(part)) for part in parts]
         return ''.join(hex_parts)
     
-    def final_checksum(self, c1, c2):
+    def final_cs(self, c1, c2):
         final = c1 + c2
-        return self.checksum(final)
+        return self.cs(final)
         
-    def checksum(self, header):
+    def cs(self, header):
         pos = len(header)
         if pos & 1:
             pos -= 1
@@ -92,63 +136,113 @@ class DSP:
                 yield (data_bytes, self.frag_offset)
                 data_bytes = b''
         return fragments
-        
-    def serialization(self, stream):
-        #convert self.dsp.packet from \xhex into ascii, then remove any extra '\', then convert back to \xhex
-        pass
-        
+                
     def log(self, packet):
         current_time = time.strftime("%Y%m%d-%H%M%S")
         logging.basicConfig(filename=f'packet_{current_time}.txt', level=logging.INFO, format='DotSlashProtocol:%(message)s')
         logging.info(packet)
-        
-    def send_packet(self, packet):
-        s = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW)
-        i = s.setsockopt(socket.IPPROTO_IP,  socket.IP_HDRINCL, 1)
-        print('\nSOCKET INFO:', s, i, 'IP_PROTOIP:', socket.IPPROTO_IP, 'IP_HDRINCL:',  socket.IP_HDRINCL)
-        s.bind(('0.0.0.0', self.source_port))
-        s.sendto(packet, (self.dest_ip, self.dest_port))
-        return
+
         
     def dsp(self):
+        ecc = ECC()
+        self.encrypted_data = ecc.encrypt(self.data.encode())
         fragments = self.fragmentation(self.data.encode())
         frag_offset = self.frag_offset
-        header1 = b'\xcc\x18' + self.total_length()# Version, IHL | Total Length of Packet
+        header1 = b'\x45\x18' + self.total_length()# Version, IHL | Total Length of Packet
         print('\nPACKET BREAKDOWN:')
         print(header1, ' Version, IHL, Total Length of Packet')
-        header2 = b'\xcc\xc0' + self.str_to_bytes(self.port_to_hex(frag_offset))# Identification | Fragment Offset
+        header2 = b'\xc0\x53' + self.str_to_bytes(self.port_to_hex(frag_offset))# Identification | Fragment Offset
         print(header2, ' Identification | Fragment Offset')
-        header3 = socket.inet_aton(self.source_ip)# Source Address
-        print(header3, ' Source Address')
-        header4 = socket.inet_aton(self.dest_ip)# Destination Address
-        print(header4, ' Destination Address')
-        header5 = self.port_to_hex(self.source_port) + self.port_to_hex(self.dest_port)# Source Port | Destination Port
-        header5 = self.str_to_bytes(header5)
-        print(header5, ' Source Port | Destination Port')
-        mainheader = header1 + header2 + header3 + header4 + header5
-        header6 = b'\xff\xd7' + self.checksum(mainheader)# TTL, Protocol | Header Checksum
-        print(header6, ' TTL, Protocol | Header Checksum')
-        header7 = self.cluster()# Cluster Number
-        print(header7, ' Cluster Number')
+        header3 = self.cluster()# Cluster Number
+        print(header3, ' Cluster Number')
+        header4 = socket.inet_aton(self.source_ip)# Source Address
+        print(header4, ' Source Address')
+        header5 = socket.inet_aton(self.dest_ip)# Destination Address
+        print(header5, ' Destination Address')
+        header6 = self.port_to_hex(self.source_port) + self.port_to_hex(self.dest_port)# Source Port | Destination Port
+        header6 = self.str_to_bytes(header6)
+        print(header6, ' Source Port | Destination Port')
+        mainheader = header1 + header2 + header3 + header4 + header5 + header6
+        header7 = b'\xff\x1c' + self.cs(mainheader)# TTL, Protocol | Header Checksum
+        mainheader = mainheader + header7
+        print(header7, ' TTL, Protocol | Header Checksum')
         header8 = b'\x21\x00' + self.str_to_bytes(self.port_to_hex(len(self.data.encode())))# Data Offset, Reserved | Data Size
         print(header8, ' Data Offset, Reserved | Data Size')
-        header9 = self.data_to_bytes(self.str_to_hex(self.data))# Data, max of 255^2-36 bytes per fragment
-        mainheader = mainheader + header6
+        header9 = self.tuple_to_bytes(self.encrypted_data)# Data, max of 255^2-36 bytes per fragment
         print(header9, ' Data')
-        dataheader = header7 + header8 + header9
-        header10 = self.checksum(dataheader) + self.final_checksum(self.checksum(mainheader), self.checksum(dataheader))# Data Checksum | Final Checksum
+        dataheader = header8 + header9
+        header10 = self.cs(dataheader) + self.final_cs(self.cs(mainheader), self.cs(dataheader))# Data Checksum | Final Checksum
         packet = mainheader + dataheader + header10
         print(header10, ' Data Checksum | Final Checksum')
-        print('\nPACKET:', packet)
+        print('\nPACKET:', packet, '\n\nDATA PLAINTEXT:', self.data)
         self.log(packet)
-        self.send_packet(packet)
-            
+
+
+        eths = socket.socket(socket.AF_PACKET, socket.SOCK_RAW)
+        interface = 'eth0'
+        src_mac = 'c0:53:1c:c0:53:1c'
+        dst_mac = ''
+        eth_type = 0x0800
+        src_mac_bytes = bytes.fromhex(src_mac.replace(':', ''))
+        dst_mac_bytes = bytes.fromhex(dst_mac.replace(':', ''))
+        eth_header = struct.pack('!6s6sH', dst_mac_bytes, src_mac_bytes, eth_type)
+        ethpacket = eth_header + packet
+        eths.sendto(ethpacket, (interface, 0))
+        
+def verify_port(port):
+    return 0 <= port <= 65535
+
+def verify_ip(ip):
+    parts = ip.split('.')
+    if len(parts) != 4:
+        return False
+    for part in parts:
+        if not part.isdigit() or not 0 <= int(part) <= 255:
+            return False
+    return True  
+    
+def verify_mac(mac):
+    pattern = re.compile(
+        r"^"
+        r"([0-9A-Fa-f]{2}[:-]){5}"
+        r"([0-9A-Fa-f]{2})"
+        r"$"
+    )
+    if pattern.match(mac):
+        return True
+    else:
+        return False
+    
 def get_user_input():
-    source_ip = socket.gethostbyname(socket.gethostname())
-    print(f"Source IP Address: {source_ip}")
+    spoof = input("Do you want to spoof the IP address? (y/n): ")
+    if spoof.lower() == 'y':
+        source_ip = input("Enter the IP address to spoof: ")
+        if verify_ip(source_ip):
+            print(f"{source_ip} is a valid IP address. Spoofing enabled.")
+        else:
+            print(f"{source_ip} is not a valid IP address. Please enter a valid IP address.")
+    else:
+        source_ip = socket.gethostbyname(socket.gethostname())
+        
+    spoofm = input("Do you want to spoof the MAC address? (y/n): ")
+    if spoofm.lower() == 'y':
+        mac = input("Enter the MAC address to spoof: ")
+        if verify_mac(mac):
+            print(f"{mac} is a valid MAC address. Spoofing enabled.")
+        else:
+            print(f"{mac} is not a valid MAC address. Please enter a valid MAC address.")
+    else:
+        mac = 'c0:53:1c:c0:53:1c'
+    print(f"DSP/IP Address: {source_ip}\nDSP MAC Address: {mac}")
     dest_ip = input("Enter the destination IP address (default: 192.168.1.2):") or '192.168.1.2'
+    if not verify_ip(dest_ip):
+        print(f"{dest_ip} is not a valid IP address.")
     source_port = int(input("Enter the source port (default: 80):") or 80)
+    if not verify_port(source_port):
+        print(f"{source_port} is not a valid port number.")
     dest_port = int(input("Enter the destination port (default: 80):") or 80)
+    if not verify_port(dest_port):
+        print(f"{dest_port} is not a valid port number.")
     data_type = input("Do you want to enter data, upload a file, or default: (data/file/default)")
     if data_type.lower() == "data":
         data = input("Enter the data:")
@@ -159,9 +253,9 @@ def get_user_input():
                 data = file.read()
         except FileNotFoundError:
             print("File not found. Using default data.")
-            data = 'Hello, world!'
+            data = 'Welcome to DotSlashProtocol!'
     else:
-        data = 'Hello, world!'
+        data = 'Welcome to DotSlashProtocol!'
     return source_ip, dest_ip, source_port, dest_port, data
 
 if __name__ == "__main__":
