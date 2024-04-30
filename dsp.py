@@ -231,6 +231,7 @@ def get_user_input():
             print(f"{mac} is a valid MAC address. Spoofing enabled.")
         else:
             print(f"{mac} is not a valid MAC address. Please enter a valid MAC address.")
+            mac = 'c0:53:1c:c0:53:1c'
     else:
         mac = 'c0:53:1c:c0:53:1c'
     print(f"DSP/IP Address: {source_ip}\nDSP MAC Address: {mac}")
