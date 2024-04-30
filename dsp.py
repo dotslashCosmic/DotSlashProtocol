@@ -220,7 +220,6 @@ def get_user_input():
         if verify_ip(source_ip):
             print(f"{source_ip} is a valid IP address. Spoofing enabled.")
         else:
-            print(f"{source_ip} is not a valid IP address. Please enter a valid IP address.")
     else:
         source_ip = socket.gethostbyname(socket.gethostname())
         
@@ -230,7 +229,6 @@ def get_user_input():
         if verify_mac(mac):
             print(f"{mac} is a valid MAC address. Spoofing enabled.")
         else:
-            print(f"{mac} is not a valid MAC address. Please enter a valid MAC address.")
             mac = 'c0:53:1c:c0:53:1c'
     else:
         mac = 'c0:53:1c:c0:53:1c'
