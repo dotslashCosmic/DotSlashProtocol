@@ -6,6 +6,7 @@ Features:
 - Smaller footprint
 - Raw packet sending over raw socket
 - Packet logging
+- Source IP/Mac spoofing
 - Larger payload per fragmentation(soon)
 - TCP/UDP spoofing(soon)
 
