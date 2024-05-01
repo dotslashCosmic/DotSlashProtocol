@@ -4,10 +4,11 @@ Based on [TUPacket](https://github.com/dotslashCosmic/TUPacket) by me :)
 
 Features: 
 - Smaller footprint
-- Raw packet sending over raw socket
 - Packet logging
 - Source IP/Mac spoofing
 - ECC encryption
+- Server to accept and read DSP packets
+- Full local and public IPv4 integration
 - Larger payload per fragmentation(soon)
 - TCP/UDP spoofing(soon)
 
