@@ -41,11 +41,12 @@ class ECC():
         return aesgcm.decrypt(nonce, ct, None)
         
 class DSP:
-    def __init__(self, source_ip, dest_ip, source_port, dest_port, data):
+    def __init__(self, source_ip, dest_ip, source_port, dest_port, dest_mac, data):
         self.source_ip = source_ip
         self.dest_ip = dest_ip
         self.source_port = source_port
         self.dest_port = dest_port
+        self.dest_mac = dest_mac
         self.data = data
         self.frag_offset = 0
     
@@ -154,7 +155,7 @@ class DSP:
         header2 = b'\xc0\x53' + self.str_to_bytes(self.port_to_hex(frag_offset))# Identification | Fragment Offset
         print(header2, ' Identification | Fragment Offset')
         header3 = b'\xff' + self.cluster()# TTL | Cluster Number
-        print(header3, ' Cluster Number')
+        print(header3, ' TTL | Cluster Number')
         header4 = socket.inet_aton(self.source_ip)# Source Address
         print(header4, ' Source Address')
         header5 = socket.inet_aton(self.dest_ip)# Destination Address
@@ -165,8 +166,8 @@ class DSP:
         mainheader = header1 + header2 + header3 + header4 + header5 + header6
         header7 = b'\x00\x1c' + self.cs(mainheader)# Reserved, Protocol | Header Checksum
         mainheader = mainheader + header7
-        print(header7, ' TTL, Protocol | Header Checksum')
-        header8 = b'\x21\x00' + self.str_to_bytes(self.port_to_hex(len(self.data.encode())))# Data Offset, Reserved | Data Size
+        print(header7, ' Reserved, Protocol | Header Checksum')
+        header8 = b'\x21\xb2' + self.str_to_bytes(self.port_to_hex(len(self.data.encode())))# Data Offset, Reserved | Data Size
         print(header8, ' Data Offset, Reserved | Data Size')
         header9 = self.tuple_to_bytes(self.encrypted_data)# Data, max of 255^2-36 bytes per fragment
         print(header9, ' Data')
@@ -179,10 +180,9 @@ class DSP:
         eths = socket.socket(socket.AF_PACKET, socket.SOCK_RAW)
         interface = 'eth0'
         src_mac = 'c0:53:1c:c0:53:1c'
-        dst_mac = ''
         eth_type = 0x0800
         src_mac_bytes = bytes.fromhex(src_mac.replace(':', ''))
-        dst_mac_bytes = bytes.fromhex(dst_mac.replace(':', ''))
+        dst_mac_bytes = bytes.fromhex(dest_mac.replace(':', ''))
         eth_header = struct.pack('!6s6sH', dst_mac_bytes, src_mac_bytes, eth_type)
         ethpacket = eth_header + packet
         eths.sendto(ethpacket, (interface, 0))
@@ -212,7 +212,7 @@ def verify_mac(mac):
         return False
     
 def get_user_input():
-    spoof = input("Do you want to spoof the IP address? (y/n): ")
+    spoof = input("Do you want to spoof the IP source address? (y/n): ")
     if spoof.lower() == 'y':
         source_ip = input("Enter the IP address to spoof: ")
         if verify_ip(source_ip):
@@ -221,8 +221,7 @@ def get_user_input():
             print(f"{source_ip} is not a valid IP address. Please enter a valid IP address.")
     else:
         source_ip = socket.gethostbyname(socket.gethostname())
-        
-    spoofm = input("Do you want to spoof the MAC address? (y/n): ")
+    spoofm = input("Do you want to spoof the MAC source address? (y/n): ")
     if spoofm.lower() == 'y':
         mac = input("Enter the MAC address to spoof: ")
         if verify_mac(mac):
@@ -231,7 +230,12 @@ def get_user_input():
             mac = 'c0:53:1c:c0:53:1c'
     else:
         mac = 'c0:53:1c:c0:53:1c'
-    print(f"DSP/IP Address: {source_ip}\nDSP MAC Address: {mac}")
+    dest_mac = input("Enter the destination MAC address (default: 12:12:12:12:12:12):") or '12:12:12:12:12:12'
+    if verify_mac(dest_mac):
+        print(f"{dest_mac} is a valid MAC address.")
+    else:
+        dest_mac = '12:12:12:12:12:12'
+    print(f"DSP Source IP Address: {source_ip}\nDSP Source MAC Address: {mac}\nDSP Destination MAC Address: {dest_mac}")
     dest_ip = input("Enter the destination IP address (default: 192.168.1.2):") or '192.168.1.2'
     if not verify_ip(dest_ip):
         print(f"{dest_ip} is not a valid IP address.")
@@ -254,10 +258,10 @@ def get_user_input():
             data = 'Welcome to DotSlashProtocol!'
     else:
         data = 'Welcome to DotSlashProtocol!'
-    return source_ip, dest_ip, source_port, dest_port, data
+    return source_ip, dest_ip, source_port, dest_port, dest_mac, data
 
 if __name__ == "__main__":
     print("Welcome to DotSlashProtocol - A TCP/IP Fork")
-    source_ip, dest_ip, source_port, dest_port, data = get_user_input()
-    send = DSP(source_ip, dest_ip, source_port, dest_port, data)
+    source_ip, dest_ip, source_port, dest_port, dest_mac, data = get_user_input()
+    send = DSP(source_ip, dest_ip, source_port, dest_port, dest_mac, data)
     send.dsp()
