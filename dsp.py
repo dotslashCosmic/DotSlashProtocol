@@ -119,9 +119,10 @@ class DSP:
         return hexresult
         
     def cluster(self):
-        cluster_id = os.urandom(4)
+        cluster_id = os.urandom(2)
         hex_cluster_id = cluster_id.hex()
-        assert len(hex_cluster_id) == 8
+        assert len(hex_cluster_id) == 4
+        hex_cluster_id = 'cc' + hex_cluster_id
         full_id = self.str_to_bytes(hex_cluster_id)
         return full_id
         
@@ -142,7 +143,6 @@ class DSP:
         logging.basicConfig(filename=f'packet_{current_time}.txt', level=logging.INFO, format='DotSlashProtocol:%(message)s')
         logging.info(packet)
 
-        
     def dsp(self):
         ecc = ECC()
         self.encrypted_data = ecc.encrypt(self.data.encode())
@@ -153,7 +153,7 @@ class DSP:
         print(header1, ' Version, IHL, Total Length of Packet')
         header2 = b'\xc0\x53' + self.str_to_bytes(self.port_to_hex(frag_offset))# Identification | Fragment Offset
         print(header2, ' Identification | Fragment Offset')
-        header3 = self.cluster()# Cluster Number
+        header3 = b'\xff' + self.cluster()# TTL | Cluster Number
         print(header3, ' Cluster Number')
         header4 = socket.inet_aton(self.source_ip)# Source Address
         print(header4, ' Source Address')
@@ -163,7 +163,7 @@ class DSP:
         header6 = self.str_to_bytes(header6)
         print(header6, ' Source Port | Destination Port')
         mainheader = header1 + header2 + header3 + header4 + header5 + header6
-        header7 = b'\xff\x1c' + self.cs(mainheader)# TTL, Protocol | Header Checksum
+        header7 = b'\x00\x1c' + self.cs(mainheader)# Reserved, Protocol | Header Checksum
         mainheader = mainheader + header7
         print(header7, ' TTL, Protocol | Header Checksum')
         header8 = b'\x21\x00' + self.str_to_bytes(self.port_to_hex(len(self.data.encode())))# Data Offset, Reserved | Data Size
@@ -176,8 +176,6 @@ class DSP:
         print(header10, ' Data Checksum | Final Checksum')
         print('\nPACKET:', packet, '\n\nDATA PLAINTEXT:', self.data)
         self.log(packet)
-
-
         eths = socket.socket(socket.AF_PACKET, socket.SOCK_RAW)
         interface = 'eth0'
         src_mac = 'c0:53:1c:c0:53:1c'
@@ -220,6 +218,7 @@ def get_user_input():
         if verify_ip(source_ip):
             print(f"{source_ip} is a valid IP address. Spoofing enabled.")
         else:
+            print(f"{source_ip} is not a valid IP address. Please enter a valid IP address.")
     else:
         source_ip = socket.gethostbyname(socket.gethostname())
         
