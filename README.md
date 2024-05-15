@@ -9,6 +9,7 @@ Features:
 - ECC encryption
 - Server to accept and read DSP packets
 - Full local and public IPv4 integration
+- Created HTTP fork for handling DSP traffic(TODO, soon)
 - Larger payload per fragmentation(soon)
 - TCP/UDP spoofing(soon)
 
