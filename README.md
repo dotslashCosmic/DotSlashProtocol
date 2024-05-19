@@ -6,7 +6,7 @@ Features:
 - Smaller footprint
 - Packet logging
 - Source IP/Mac spoofing
-- ECC encryption
+- AES encryption + compression
 - Server to accept and read DSP packets
 - Full local and public IPv4 integration
 - Created HTTP fork for handling DSP traffic(TODO, soon)
