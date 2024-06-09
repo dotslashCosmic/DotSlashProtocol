@@ -15,6 +15,7 @@ Features:
 - TCP/UDP spoofing(soon)
 
 Still under construction
+Python =>3.10
 
 Warning- Python interpreter may turn \x hex chars into their respective ASCII forms in the header prints- it's only visual.
 
