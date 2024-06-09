@@ -1,12 +1,10 @@
 #DotSlashProtocol - A TCP/IP Fork
 #Author: dotSlashCosmic
 
-import socket, time, binascii, struct, os, logging, time, re
+import socket, time, binascii, struct, os, logging, re
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 class ECC():
@@ -147,6 +145,7 @@ class DSP:
     def dsp(self):
         ecc = ECC()
         self.encrypted_data = ecc.encrypt(self.data.encode())
+#TODO impliment fragmentation/large packet
         fragments = self.fragmentation(self.data.encode())
         frag_offset = self.frag_offset
         header1 = b'\x45\x18' + self.total_length()# Version, IHL | Total Length of Packet
@@ -230,12 +229,11 @@ def get_user_input():
             mac = 'c0:53:1c:c0:53:1c'
     else:
         mac = 'c0:53:1c:c0:53:1c'
-    dest_mac = input("Enter the destination MAC address (default: 12:12:12:12:12:12):") or '12:12:12:12:12:12'
+    dest_mac = input("Enter the destination MAC address (default: c0:53:1c:c0:53:1c):") or 'c0:53:1c:c0:53:1c'
     if verify_mac(dest_mac):
         print(f"{dest_mac} is a valid MAC address.")
     else:
-        dest_mac = '12:12:12:12:12:12'
-    print(f"DSP Source IP Address: {source_ip}\nDSP Source MAC Address: {mac}\nDSP Destination MAC Address: {dest_mac}")
+        dest_mac = 'c0:53:1c:c0:53:1c'
     dest_ip = input("Enter the destination IP address (default: 192.168.1.2):") or '192.168.1.2'
     if not verify_ip(dest_ip):
         print(f"{dest_ip} is not a valid IP address.")
@@ -245,6 +243,8 @@ def get_user_input():
     dest_port = int(input("Enter the destination port (default: 80):") or 80)
     if not verify_port(dest_port):
         print(f"{dest_port} is not a valid port number.")
+    
+    print(f"DSP Source IP Address: {source_ip}:{source_port}\nDSP Source MAC Address: {mac}\nDSP Destination IP Address: {dest_ip}:{dest_port}DSP Destination MAC Address: {dest_mac}")
     data_type = input("Do you want to enter data, upload a file, or default: (data/file/default)")
     if data_type.lower() == "data":
         data = input("Enter the data:")
