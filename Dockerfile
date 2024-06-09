@@ -11,4 +11,4 @@ COPY . /app
 RUN pip install -r requirements.txt
 
 # Define the entry point for the container
-CMD ["sudo", "python", "dsp.py"]
+CMD ["python", "dsp.py"]
