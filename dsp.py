@@ -244,7 +244,7 @@ def get_user_input():
     if not verify_port(dest_port):
         print(f"{dest_port} is not a valid port number.")
     
-    print(f"DSP Source IP Address: {source_ip}:{source_port}\nDSP Source MAC Address: {mac}\nDSP Destination IP Address: {dest_ip}:{dest_port}DSP Destination MAC Address: {dest_mac}")
+    print(f"DSP Source IP Address: {source_ip}:{source_port}\nDSP Source MAC Address: {mac}\nDSP Destination IP Address: {dest_ip}:{dest_port}\nDSP Destination MAC Address: {dest_mac}")
     data_type = input("Do you want to enter data, upload a file, or default: (data/file/default)")
     if data_type.lower() == "data":
         data = input("Enter the data:")
