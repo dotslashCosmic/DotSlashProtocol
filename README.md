@@ -15,6 +15,7 @@ WARNING!
 When using -pck, it uses your actual MAC and public IP address.
 
 Features: 
+- Windows/Linux support
 - Smaller footprint
 - Packet logging
 - Source IP/Mac/Port spoofing
