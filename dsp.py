@@ -244,12 +244,12 @@ def handle_args():
         srcip, srcport = srcip_srcport.split(':')
         srcip = srcip or '192.168.1.2'  # Set a default IP address if not provided
         srcport = srcport or '80'  # Set a default port value if not provided
-        srcmac = srcmac or 'C0:53:1C:C0:53:1C'  # Set a default MAC address if not provided
+        srcmac = srcmac or 'c0:53:1c:c0:53:1c'  # Set a default MAC address if not provided
         src = f'{srcmac}@{srcip}:{srcport}'  # Construct src with default values
         dstmac, dstip_dstport = dst.split('@')
         dstip, dstport = dstip_dstport.split(':')
         dstport = dstport or '80'
-        dstmac = dstmac or 'C0:53:1C:C0:53:1C'
+        dstmac = dstmac or 'c0:53:1c:c0:53:1c'
         dst = f'{dstmac}@{dstip}:{dstport}'
         print("Source:", src)
         print("Destination:", dst)
@@ -258,10 +258,10 @@ def handle_args():
         dstmac, dstip_dstport = args.pck.split('@')
         dstip, dstport = dstip_dstport.split(':')
         dstport = dstport or '80'
-        dstmac = dstmac or 'C0:53:1C:C0:53:1C'
+        dstmac = dstmac or 'c0:53:1c:c0:53:1c'
         dst = f'{dstmac}@{dstip}:{dstport}'
-        mac_num = hex(uuid.getnode()).replace('0x', '')
-        srcmac = ':'.join(mac_num[i: i + 2] for i in range(0, 11, 2))
+        mac_num = hex(uuid.getnode()).replace('0x', '00')
+        srcmac = ':'.join(mac_num[i: i + 2] for i in range(0, 12, 2))
         srcport = '80' or srcport
         srcip = public_ip
         print("Source:", f'{srcmac}@{srcip}:{srcport}')
