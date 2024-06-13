@@ -1,5 +1,6 @@
 #DotSlashProtocol - A TCP/IP Fork
 #Author: dotSlashCosmic
+#TODO Add decompression from data
 
 import socket, struct
 
