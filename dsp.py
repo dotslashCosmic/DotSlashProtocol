@@ -173,23 +173,34 @@ class DSP:
         header8 = b'\x21\xb2' + self.str_to_bytes(self.port_to_hex(len(self.data.encode())))# Data Offset, Reserved | Data Size
         print(header8, ' Data Offset, Reserved | Data Size')
         header9 = self.str_to_bytes(self.data)# Data, max of 255^2-36 bytes per fragment
-        print(header9, ' Data')
+        print("b'"+self.data+"' Data")
         dataheader = header8 + header9
         header10 = self.cs(dataheader) + self.final_cs(self.cs(mainheader), self.cs(dataheader))# Data Checksum | Final Checksum
         packet = mainheader + dataheader + header10
         print(header10, ' Data Checksum | Final Checksum')
-        print('\nDATA HEX:', self.data)
         self.log(packet)
-        eths = socket.socket(socket.AF_PACKET, socket.SOCK_RAW)
-        interface = 'eth0'
+        try:
+            eths = socket.socket(socket.AF_PACKET, socket.SOCK_RAW)
+            interface = 'eth0'
+        except:
+            eths = socket.socket(socket.AF_INET, socket.SOCK_RAW)
+            interface = self.dest_ip
         eth_type = 0x0800
-        src_mac_bytes = bytes.fromhex(src_mac.replace(':', ''))
-        dst_mac_bytes = bytes.fromhex(dest_mac.replace(':', ''))
+        src_mac_bytes = bytes.fromhex(srcmac.replace(':', ''))
+        dst_mac_bytes = bytes.fromhex(dstmac.replace(':', ''))
         eth_header = struct.pack('!6s6sH', dst_mac_bytes, src_mac_bytes, eth_type)
         eth_packet = eth_header + packet
-        print(f"Eth Packet: {eth_packet}")
+        print("\nPacket:", eth_packet)
         eths.sendto(eth_packet, (interface, 0))
+        print("Packet sent!")
         
+def get_local_ip():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.connect(("192.168.1.1", 80))
+    local_ip = s.getsockname()[0]
+    s.close()
+    return local_ip
+    
 def get_public_ip():
     try:
         response = requests.get('https://api64.ipify.org?format=json')
@@ -200,7 +211,8 @@ def get_public_ip():
         else:
             return "Error fetching public IP."
     except Exception as e:
-        return f"An error occurred: {str(e)}"
+        print(f"An error occurred: {str(e)}.\nExiting.")
+        sys.exit(1)
 
 def base_encode_64(inp):
     b = base64.b64encode(bytes(inp, 'utf-8'))
@@ -228,24 +240,24 @@ def verify_mac(mac):
         return False, f"{mac} is not a valid MAC address."
     
 def handle_args():
-    parser = argparse.ArgumentParser(description="DotSlashProtocol - A TCP/IP Fork")
-    parser.add_argument('-dev', type=str, metavar='"SrcMac@SrcIp:SrcPort>DstMac@DstIp:DstPort" - Spoofing mode')
-    parser.add_argument('-pck', type=str, metavar='DstMac@DstIp:DstPort - Normal mode (port optional)')
+    parser = argparse.ArgumentParser(description="")
+    parser.add_argument('-dev', type=str, metavar='"SrcMac@SrcIp:SrcPort>DstMac@DstIp:DstPort"', help = 'Spoofing mode')
+    parser.add_argument('-pck', type=str, metavar='DstMac@DstIp:DstPort', help='Normal mode (mac/port optional)')
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('-Ds', type=str, default='Welcome to DotSlashProtocol!', help='Data string')
+    group.add_argument('-Ds', type=str, default='Welcome to DotSlashProtocol!', help='Data string (default "Welcome to DotSlashProtocol!")')
     group.add_argument('-Df', type=str, help='Data file')
     args = parser.parse_args()
-
-    public_ip = get_public_ip()  # Store the public IP address
-
+    print("Disabling public IP grab for speed purposes, defaulting to local IP address")
+    #public_ip = get_public_ip()
+    public_ip = get_local_ip()
     if args.dev:
         src, dst = args.dev.split('>')
         srcmac, srcip_srcport = src.split('@')
         srcip, srcport = srcip_srcport.split(':')
-        srcip = srcip or '192.168.1.2'  # Set a default IP address if not provided
-        srcport = srcport or '80'  # Set a default port value if not provided
-        srcmac = srcmac or 'c0:53:1c:c0:53:1c'  # Set a default MAC address if not provided
-        src = f'{srcmac}@{srcip}:{srcport}'  # Construct src with default values
+        srcip = srcip or get_local_ip()
+        srcport = srcport or '80'
+        srcmac = srcmac or 'c0:53:1c:c0:53:1c'
+        src = f'{srcmac}@{srcip}:{srcport}'
         dstmac, dstip_dstport = dst.split('@')
         dstip, dstport = dstip_dstport.split(':')
         dstport = dstport or '80'
@@ -253,7 +265,6 @@ def handle_args():
         dst = f'{dstmac}@{dstip}:{dstport}'
         print("Source:", src)
         print("Destination:", dst)
-
     elif args.pck:
         dstmac, dstip_dstport = args.pck.split('@')
         dstip, dstport = dstip_dstport.split(':')
@@ -264,7 +275,8 @@ def handle_args():
         srcmac = ':'.join(mac_num[i: i + 2] for i in range(0, 12, 2))
         srcport = '80' or srcport
         srcip = public_ip
-        print("Source:", f'{srcmac}@{srcip}:{srcport}')
+        src = f'{srcmac}@{srcip}:{srcport}'
+        print("Source:", src)
         print("Destination:", dst)
     else:
         print("Either -dev or -dst argument is required.")
