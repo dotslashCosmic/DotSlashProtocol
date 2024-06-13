@@ -1,14 +1,17 @@
 DSP/DotSlashProtocol - A TCP/IP Fork
 
-Based on [TUPacket](https://github.com/dotslashCosmic/TUPacket) by me :)
 Usage: 
+
 $ python dsp.py -dev "SrcMac@SrcIp:SrcPort>DstMac@DstIp:DstPort" -Ds 'Hello!'
+
 $ python dsp.py -pck "DstMac@DstIp:DstPort" -Df 'file.php'
+
 Only destination IP is required, the rest default if unused. (requires " @:>@: " for parsing)
 Such as:
+
 $ python dsp.py -dev "@:>@5.5.5.5:" -Ds 'Hello!'
 
-WARNING!
+WARNING! 
 When using -pck, it uses your actual MAC and public IP address.
 
 Features: 
