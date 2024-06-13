@@ -2,7 +2,7 @@
 #Author: dotSlashCosmic
 #TODO Fix the encryption. commented code is encryption related. requires pycryptodome
 
-import argparse, socket, time, struct, os, logging, time, re, getpass, zlib, uuid
+import argparse, base64, socket, time, struct, os, logging, time, re, sys, getpass, zlib, uuid, requests
 #from Crypto.Cipher import AES
 #from Crypto.Hash import SHA3_512
 #from Crypto.Util.Padding import pad, unpad
@@ -172,13 +172,13 @@ class DSP:
         print(header7, ' Reserved, Protocol | Header Checksum')
         header8 = b'\x21\xb2' + self.str_to_bytes(self.port_to_hex(len(self.data.encode())))# Data Offset, Reserved | Data Size
         print(header8, ' Data Offset, Reserved | Data Size')
-        header9 = self.data.encode()# Data, max of 255^2-36 bytes per fragment
+        header9 = self.str_to_bytes(self.data)# Data, max of 255^2-36 bytes per fragment
         print(header9, ' Data')
         dataheader = header8 + header9
         header10 = self.cs(dataheader) + self.final_cs(self.cs(mainheader), self.cs(dataheader))# Data Checksum | Final Checksum
         packet = mainheader + dataheader + header10
         print(header10, ' Data Checksum | Final Checksum')
-        print('\nDATA PLAINTEXT:', self.data)
+        print('\nDATA HEX:', self.data)
         self.log(packet)
         eths = socket.socket(socket.AF_PACKET, socket.SOCK_RAW)
         interface = 'eth0'
@@ -189,7 +189,24 @@ class DSP:
         eth_packet = eth_header + packet
         print(f"Eth Packet: {eth_packet}")
         eths.sendto(eth_packet, (interface, 0))
+        
+def get_public_ip():
+    try:
+        response = requests.get('https://api64.ipify.org?format=json')
+        if response.status_code == 200:
+            data = response.json()
+            public_ip = data.get('ip')
+            return public_ip
+        else:
+            return "Error fetching public IP."
+    except Exception as e:
+        return f"An error occurred: {str(e)}"
 
+def base_encode_64(inp):
+    b = base64.b64encode(bytes(inp, 'utf-8'))
+    b64_str = b.decode('utf-8')
+    return b64_str
+    
 def verify_port(port):
     if 0 <= port <= 65535:
         return True, ""
@@ -209,45 +226,58 @@ def verify_mac(mac):
         return True, ""
     else:
         return False, f"{mac} is not a valid MAC address."
-
+    
 def handle_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-dev', type=str, help='Spoofing mode - SrcMac@SrcIp:SrcPort>DstMac@DstIp:DstPort')
-    parser.add_argument('-dst', type=str, help='Packet destinaton - Mac@Ip:Port (Port is optional)')
-#    parser.add_argument('-e', type=str, help='Add encryption password (Optional)')
-#    password = e
+    parser = argparse.ArgumentParser(description="DotSlashProtocol - A TCP/IP Fork")
+    parser.add_argument('-dev', type=str, metavar='"SrcMac@SrcIp:SrcPort>DstMac@DstIp:DstPort" - Spoofing mode')
+    parser.add_argument('-pck', type=str, metavar='DstMac@DstIp:DstPort - Normal mode (port optional)')
     group = parser.add_mutually_exclusive_group()
     group.add_argument('-Ds', type=str, default='Welcome to DotSlashProtocol!', help='Data string')
     group.add_argument('-Df', type=str, help='Data file')
     args = parser.parse_args()
+
+    public_ip = get_public_ip()  # Store the public IP address
+
     if args.dev:
         src, dst = args.dev.split('>')
         srcmac, srcip_srcport = src.split('@')
         srcip, srcport = srcip_srcport.split(':')
+        srcip = srcip or '192.168.1.2'  # Set a default IP address if not provided
+        srcport = srcport or '80'  # Set a default port value if not provided
+        srcmac = srcmac or 'C0:53:1C:C0:53:1C'  # Set a default MAC address if not provided
+        src = f'{srcmac}@{srcip}:{srcport}'  # Construct src with default values
         dstmac, dstip_dstport = dst.split('@')
         dstip, dstport = dstip_dstport.split(':')
-    elif args.dst:
-        dstport = 80
-        srcport = 80
-        dstmac, dstip_dstport = args.dst.split('@')
-        if ':' in dstip_dstport:
-            dstip, dstport = dstip_dstport.split(':')
-        else:
-            dstip = dstip_dstport
-        srcip = socket.gethostbyname(socket.gethostname())
+        dstport = dstport or '80'
+        dstmac = dstmac or 'C0:53:1C:C0:53:1C'
+        dst = f'{dstmac}@{dstip}:{dstport}'
+        print("Source:", src)
+        print("Destination:", dst)
+
+    elif args.pck:
+        dstmac, dstip_dstport = args.pck.split('@')
+        dstip, dstport = dstip_dstport.split(':')
+        dstport = dstport or '80'
+        dstmac = dstmac or 'C0:53:1C:C0:53:1C'
+        dst = f'{dstmac}@{dstip}:{dstport}'
         mac_num = hex(uuid.getnode()).replace('0x', '')
         srcmac = ':'.join(mac_num[i: i + 2] for i in range(0, 11, 2))
-        
+        srcport = '80' or srcport
+        srcip = public_ip
+        print("Source:", f'{srcmac}@{srcip}:{srcport}')
+        print("Destination:", dst)
     else:
         print("Either -dev or -dst argument is required.")
-        return
+        parser.print_help()
+        sys.exit(1)
     if args.Ds and args.Ds != 'True':
-        data = args.Ds
+        data = DSP.str_to_hex(1, base_encode_64(args.Ds))
     elif args.Df:
         with open(args.Df, 'r') as file:
-            data = file.read()
+            file_content = file.read()
+            data = DSP.str_to_hex(1, base_encode_64(file_content))
     else:
-        data = 'Welcome to DotSlashProtocol!'
+        data = DSP.str_to_hex(1, base_encode_64('Welcome to DotSlashProtocol!'))
 #    return srcip, dstip, srcport, dstport, srcmac, dstmac, data, password
     return srcip, dstip, srcport, dstport, srcmac, dstmac, data
 
