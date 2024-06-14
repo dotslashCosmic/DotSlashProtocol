@@ -2,7 +2,7 @@
 #Author: dotSlashCosmic
 #TODO Fix the encryption. commented code is encryption related. requires pycryptodome
 
-import argparse, base64, socket, time, struct, os, logging, time, re, sys, getpass, zlib, uuid, requests
+import argparse, base64, socket, time, struct, os, logging, time, re, sys, getpass, zlib, uuid, requests, platform
 #from Crypto.Cipher import AES
 #from Crypto.Hash import SHA3_512
 #from Crypto.Util.Padding import pad, unpad
@@ -48,6 +48,7 @@ class DSP:
         self.dest_mac = dstmac
         self.data = data
         self.frag_offset = 0
+        self.system = platform.system()
 #        self.cipher = Encrypt(password)
 
     def dataint(self, t):
@@ -122,15 +123,15 @@ class DSP:
         return hexresult
 
     def cluster(self):
-        cluster_id = os.urandom(2)
+        cluster_id = os.urandom(3)
         hex_cluster_id = cluster_id.hex()
-        assert len(hex_cluster_id) == 4
-        hex_cluster_id = 'cc' + hex_cluster_id
+        assert len(hex_cluster_id) == 6
+        hex_cluster_id = hex_cluster_id
         full_id = self.str_to_bytes(hex_cluster_id)
         return full_id
 
     def fragmentation(self, data_bytes):
-        max_data_size = (255**2) - 36
+        max_data_size = 102400
         while data_bytes:
             if len(data_bytes) > max_data_size:
                 fragment, data_bytes = data_bytes[:max_data_size], data_bytes[max_data_size:]
@@ -147,53 +148,63 @@ class DSP:
         logging.info(packet)
 
     def dsp(self):
-#        e = Encrypt(password)
-#        self.encrypted_data = e.encrypt_data(self.data.encode())
-        e = self.data.encode()
-        fragments = self.fragmentation(self.data.encode())
-        frag_offset = self.frag_offset
-        header1 = b'\x45\x18' + self.total_length()# Version, IHL | Total Length of Packet
-        print('\nPACKET BREAKDOWN:')
-        print(header1, ' Version, IHL, Total Length of Packet')
-        header2 = b'\xc0\x53' + self.str_to_bytes(self.port_to_hex(frag_offset))# Identification | Fragment Offset
-        print(header2, ' Identification | Fragment Offset')
-        header3 = b'\xff' + self.cluster()# TTL | Cluster Number
-        print(header3, ' TTL | Cluster Number')
-        header4 = socket.inet_aton(self.source_ip)# Source Address
-        print(header4, ' Source Address')
-        header5 = socket.inet_aton(self.dest_ip)# Destination Address
-        print(header5, ' Destination Address')
-        header6 = self.port_to_hex(self.source_port) + self.port_to_hex(self.dest_port)# Source Port | Destination Port
-        header6 = self.str_to_bytes(header6)
-        print(header6, ' Source Port | Destination Port')
-        mainheader = header1 + header2 + header3 + header4 + header5 + header6
-        header7 = b'\x00\x1c' + self.cs(mainheader)# Reserved, Protocol | Header Checksum
-        mainheader = mainheader + header7
-        print(header7, ' Reserved, Protocol | Header Checksum')
-        header8 = b'\x21\xb2' + self.str_to_bytes(self.port_to_hex(len(self.data.encode())))# Data Offset, Reserved | Data Size
-        print(header8, ' Data Offset, Reserved | Data Size')
-        header9 = self.str_to_bytes(self.data)# Data, max of 255^2-36 bytes per fragment
-        print("b'"+self.data+"' Data")
-        dataheader = header8 + header9
-        header10 = self.cs(dataheader) + self.final_cs(self.cs(mainheader), self.cs(dataheader))# Data Checksum | Final Checksum
-        packet = mainheader + dataheader + header10
-        print(header10, ' Data Checksum | Final Checksum')
-        self.log(packet)
+        cluster_id = self.cluster()
         try:
-            eths = socket.socket(socket.AF_PACKET, socket.SOCK_RAW)
-            interface = 'eth0'
-        except:
-            eths = socket.socket(socket.AF_INET, socket.SOCK_RAW)
-            interface = self.dest_ip
-        eth_type = 0x0800
-        src_mac_bytes = bytes.fromhex(srcmac.replace(':', ''))
-        dst_mac_bytes = bytes.fromhex(dstmac.replace(':', ''))
-        eth_header = struct.pack('!6s6sH', dst_mac_bytes, src_mac_bytes, eth_type)
-        eth_packet = eth_header + packet
-        print("\nPacket:", eth_packet)
-        eths.sendto(eth_packet, (interface, 0))
-        print("Packet sent!")
-        
+            for fragment, frag_offset in self.fragmentation(self.data.encode()):
+                header1 = b'\x45\x18' + self.total_length()
+                header2 = b'\xc0\x53' + self.str_to_bytes(self.port_to_hex(frag_offset))
+                header3 = b'\xff' + cluster_id
+                header4 = socket.inet_aton(self.source_ip)
+                header5 = socket.inet_aton(self.dest_ip)
+                header6 = self.port_to_hex(self.source_port) + self.port_to_hex(self.dest_port)
+                mainheader = header1 + header2 + header3 + header4 + header5 + self.str_to_bytes(header6)
+                header7 = b'\x00\x1c' + self.cs(mainheader)
+                mainheader += header7
+                header8 = b'\x21\xb2' + self.str_to_bytes(self.port_to_hex(len(self.data.encode())))
+                dataheader = header8 + self.str_to_bytes(self.data)
+                max_size = 102400
+                data_size = len(dataheader)
+                part_size = max(max_size, data_size - max_size)
+                remaining = max(data_size, data_size - max_size)
+                total_fragments = (data_size + max_size - 1) // max_size
+                start_idx = frag_offset * max_size
+                end_idx = min(remaining, max_size)+start_idx
+                fragment_data = dataheader[start_idx:end_idx][4:]
+                if not fragment_data:
+                    print("No more fragments.")
+                    sys.exit(1)
+                header10 = self.cs(fragment_data) + self.final_cs(self.cs(mainheader), self.cs(fragment_data))
+                packet = mainheader + fragment_data + header10
+                print("\nPACKET BREAKDOWN:")
+                print(header1, ' Version, IHL, Total Length of Packet')
+                print(header2, ' Identification | Fragment Offset')
+                print(header3, ' TTL | Cluster Number')
+                print(header4, ' Source Address')
+                print(header5, ' Destination Address')
+                print(header6, ' Source Port | Destination Port')
+                print(header7, ' Reserved, Protocol | Header Checksum')
+                print(header8, ' Data Offset, Reserved | Data Size')
+                print("b'"+fragment_data.decode('latin-1')+"' Fragmented Data",)
+                print(self.final_cs(self.cs(mainheader), self.cs(fragment_data)), ' Main Checksum | Final Checksum')
+                if self.system == "Linux":
+                    eths = socket.socket(socket.AF_PACKET, socket.SOCK_RAW)
+                    interface = 'eth0'
+                elif self.system == "Windows":
+                    eths = socket.socket(socket.AF_INET, socket.SOCK_RAW)
+                    interface = self.dest_ip
+                else:
+                    print("Unsupported OS (let me know!). Exiting.")
+                    sys.exit(1)
+                eth_type = 0x0800
+                src_mac_bytes = bytes.fromhex(srcmac.replace(':', ''))
+                dst_mac_bytes = bytes.fromhex(dstmac.replace(':', ''))
+                eth_header = struct.pack('!6s6sH', dst_mac_bytes, src_mac_bytes, eth_type)
+                eth_packet = eth_header + packet
+                eths.sendto(eth_packet, (interface, 0))
+                print(f"Packet sent! Cluster ID:", cluster_id.hex(), "Fragment Offset:", frag_offset)
+        except NameError:
+            pass
+
 def get_local_ip():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.connect(("192.168.1.1", 80))
@@ -263,8 +274,7 @@ def handle_args():
         dstport = dstport or '80'
         dstmac = dstmac or 'c0:53:1c:c0:53:1c'
         dst = f'{dstmac}@{dstip}:{dstport}'
-        print("Source:", src)
-        print("Destination:", dst)
+        print("Source:", src, "\nDestination:", dst)
     elif args.pck:
         dstmac, dstip_dstport = args.pck.split('@')
         dstip, dstport = dstip_dstport.split(':')
@@ -276,8 +286,7 @@ def handle_args():
         srcport = '80' or srcport
         srcip = public_ip
         src = f'{srcmac}@{srcip}:{srcport}'
-        print("Source:", src)
-        print("Destination:", dst)
+        print("Source:", src, "\nDestination:", dst)
     else:
         print("Either -dev or -dst argument is required.")
         parser.print_help()
