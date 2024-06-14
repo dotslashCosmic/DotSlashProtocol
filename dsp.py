@@ -181,7 +181,7 @@ class DSP:
                 print(header3, ' TTL | Cluster Number')
                 print(header4, ' Source Address')
                 print(header5, ' Destination Address')
-                print(header6, ' Source Port | Destination Port')
+                print("b'"+header6+"' Source Port | Destination Port")
                 print(header7, ' Reserved, Protocol | Header Checksum')
                 print(header8, ' Data Offset, Reserved | Data Size')
                 print("b'"+fragment_data.decode('latin-1')+"' Fragmented Data",)
