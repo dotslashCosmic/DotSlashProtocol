@@ -15,6 +15,7 @@ WARNING!
 When using -pck, it uses your actual MAC and public IP address.
 
 Features: 
+- Verification hashes via <a href=https://github.com/dotslashCosmic/DotSlashVerify>DotSlashVerify</a>
 - Windows/Linux support
 - Smaller footprint
 - Packet logging
